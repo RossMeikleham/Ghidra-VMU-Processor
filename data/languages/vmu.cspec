@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<compiler_spec>
+  <global>
+    <range space="rom"/>
+    <range space="ram"/>
+  </global>
+
+  <data_organization>
+    <pointer_size value="2" />
+  </data_organization>
+
+  <stackpointer register="sp" space="ram" growth="positive"/>
+
+  <returnaddress>
+    <varnode space="stack" offset="0" size="2"/>
+  </returnaddress>
+
+  <default_proto>
+    <prototype name="default" extrapop="unknown" stackshift="2" strategy="register">
+      <input>
+      </input>
+      <output>
+      </output>
+      <unaffected>
+        <register name="sp"/>
+      </unaffected>
+    </prototype>
+  </default_proto>
+
+</compiler_spec>

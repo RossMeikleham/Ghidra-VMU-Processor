@@ -1,0 +1,656 @@
+define endian=little;
+define alignment=1;
+
+define space register  type=register_space  size=2  wordsize=2;
+define space ram       type=ram_space       size=2  wordsize=1;
+define space rom       type=ram_space       size=2  wordsize=1  default;
+
+# Only really has 1 register, the SFR Registers are accessed by RAM
+# R0->R3 are kind of implicit registers
+define register offset=0x00 size=2 [r0 r1 r2 r3];
+define register offset=0x10 size=2 [pc sp];
+
+define token op (8)
+  op0_8=(0,7)
+  op4_4=(4,7)
+  op0_4=(0,3)
+  op2_2=(2,3)
+  op0_0=(0,0)
+  rn=(0,1)
+;
+
+define token data8 (8)
+    simm8=(0,7) signed
+    imm8=(0,7)
+;
+
+define token data8_2 (8)
+    simm8_2=(0,7) signed
+    imm8_2=(0,7)
+;
+
+define token data16 (16)
+    simm16=(0,15) signed
+    imm16=(0,15)
+;
+
+attach variables [rn] [r0 r1 r2 r3]; 
+
+@define ACC 0x100
+@define PSW 0x101
+@define B 0x102
+@define C 0x103
+@define TRL 0x104
+@define TRH 0x105
+@define SP 0x106
+
+REL: reloc		is simm8 [ reloc = inst_next + simm8; ] { export *:2 reloc; }
+
+# Unfortunately there doesn't look to be any bit-indexing
+# for memory addresses (for writing to them), only for reading, and register r/w?
+
+# Carry flag
+macro set_cy(val) {
+    local psw = *[ram]:1 $(PSW):2;
+    *[ram]:1 $(PSW):2 = (psw & 0x7f) | (val << 7);
+}
+
+# TODO can't "return" values from macros
+# Also not sure how to nest defines, had to replace $(PSW) with 0x101 here
+# There might be a better way to express this.
+@define get_cy "*[ram]:1 0x101:2 >> 7"
+
+
+# Auxiliary Carry flag
+macro set_ac(val) {
+    local psw = *[ram]:1 $(PSW):2;
+    *[ram]:1 $(PSW):2 = (psw & 0xbf) | (val << 6);
+}
+
+# Overflow flag 
+macro set_ov(val) {
+    local psw = *[ram]:1 $(PSW):2;
+    *[ram]:1 $(PSW):2 = (psw & 0xfb) | (val << 2);
+}
+
+#INC SP, store 8-bit value at new SP address
+macro push(v) {
+    *[ram]:1 $(SP):2 = (*[ram]:1 $(SP):2) + 1;
+    local stack_addr:2 = zext(*[ram]:1 $(SP):2);
+    *[ram]:1 stack_addr = v;
+}
+
+# read 8-bit value at SP address, DEC SP
+macro pop(out) {
+     local stack_addr:2 = zext(*[ram]:1 $(SP):2);
+     local stack_value:1 = *[ram]:1 stack_addr;
+     export *:1 stack_value;
+    *[ram]:1 $(SP):2 = (*[ram]:1 $(SP):2) - 1;
+}
+
+macro call(addr) {
+     local pc_stack_addr:2 = (*[ram]:2 $(SP):2) + 1;
+    *[ram]:2 pc_stack_addr = inst_next;
+    # TODO, for some reason sp being treated as 16-bit?
+    *[ram]:1 $(SP):2 = (*[ram]:1 $(SP):2) + 2;
+    call [addr];
+}
+
+macro ret() {
+     # Pointing to upper byte, sub 1 and get full addr
+     local ret_stack_addr = (*[ram]:2 $(SP):2) - 1;
+     local ret_addr:2 = *[ram]:2 ret_stack_addr;
+     *[ram]:1 $(SP):2 = (*[ram]:1 $(SP):2) - 2;
+     return [ret_addr];
+}
+
+# NOP
+:nop is op0_8=0x0 {
+    pc = pc;
+}
+
+# BR r8
+:br addr is op0_8=0x1; simm8 [ addr=inst_next + simm8; ] {
+    goto [addr:2];
+}
+
+# LD d9
+:ld imm8 is op0_8=0x2; imm8 {
+    *[ram]:1 $(ACC):2 = *[ram]:1 imm8:2;
+}
+
+:ld d9 is op0_8=0x3; imm8 [d9 = 0x100 + imm8;] {
+    *[ram]:1 $(ACC):2 = *[ram]:1 d9:2;
+}
+
+# LD @Ri
+:ld "@"rn is op4_4=0x0 & op2_2=0x1 & rn {
+    *[ram]:1 $(ACC):2 = *[ram]:1 rn;
+}
+
+# CALL a12 
+:call a12 is op0_4>=0x8 & op4_4 <=0x1 & op0_4 & op4_4; imm8 [a12 = (imm8 | ((op0_4 - 0x8) << 8) | (op4_4 << 11));] {
+    call(a12:2);
+}
+
+# CALLR R16
+:callr r16 is op0_8=0x10; imm16 [r16 = imm16 + inst_next - 1;] {
+    call(r16:2);
+}
+
+# BRF R16
+:brf r16 is op0_8=0x11; imm16 [r16 = imm16 + inst_next - 1;] {
+    goto [r16:2];
+}
+
+# ST d9
+# TODO
+# "dummy" is a hack to get over a weird possible bug where Sleigh/the Disassembler is
+#  being strange and just overwriting the disassembled operand with the string "offset <addr>".
+#  This appears to only happen when we output a single operand "argument", in which the memory
+#  to that operand is overwritten.
+:st imm8,dummy is op0_8=0x12; imm8 [dummy = 0x00;]{
+    *[ram]:1 imm8:2 = *[ram]:1 $(ACC):2;
+}
+
+:st imm12,dummy is op0_8=0x13; imm8 [imm12 = 0x100 + imm8; dummy=0x00;] {
+    *[ram]:1 imm12:2 = *[ram]:1 $(ACC):2;
+}
+
+# ST @Ri
+:st "@"rn is op4_4=0x1 & op2_2=0x1 & rn {
+   *[ram]:1 rn = *[ram]:1 $(ACC):2;
+}
+
+# CALLF a16
+:callf abs16 is op0_8=0x20; imm8; imm8_2 [abs16 = ((imm8 << 8) | imm8_2);] {
+    call(abs16:2);
+}
+
+# JMPF a16
+:jmpf abs16 is op0_8=0x21; imm8; imm8_2 [abs16 = ((imm8 << 8) | imm8_2);] {
+    goto [abs16:2];
+}
+
+# MOV #i8,d9
+:mov "#"imm8_2, imm8 is op0_8=0x22; imm8; imm8_2 {
+     *[ram]:1 imm8:2 = imm8_2:1;
+}
+
+:mov imm8_2, d9 is op0_8=0x23; imm8; imm8_2 [d9 = 0x100 + imm8;] {
+     *[ram]:1 d9:2 = imm8_2:1;
+}
+
+# MOV #i8 @Ri
+:mov "#"imm8, "@"rn is op4_4=0x2 & op2_2=0x1 & rn; imm8 {
+    *[ram]:1 rn  = imm8;
+}
+
+# JMP a12 
+:jmp a12 is op0_4>=0x8 & op4_4 <=0x3 & op4_4 >=0x2 & op0_4 & op4_4; imm8 [a12 = (imm8 | ((op0_4 - 0x8) << 8) | ((op4_4 & 0x1) << 11));] {
+    goto [a12:2];
+}
+
+# MUL
+:mul is op0_8=0x30 {
+    local ext_acc:4 = zext(*[ram]:1 $(ACC):2);
+    local ext_b:4 = zext(*[ram]:1 $(B):2);
+    local ext_c:4 = zext(*[ram]:1 $(C):2);
+    local result:4 = ((ext_acc << 8) | ext_c) * ext_b;
+    local out_acc = ((result & 0xFFFF) >> 8);
+    local out_b = ((result & 0xFFFFFF) >> 16);
+    local out_c = (result & 0xFF);
+
+    *[ram]:1 $(ACC):2 = out_acc:1;
+    *[ram]:1 $(B):2 = out_b:1;
+    *[ram]:1 $(C):2 = out_c:1;
+
+    set_cy(0);
+    set_ov(out_b != 0);
+}
+
+# DIV
+:div is op0_8=0x40 {
+    local n:2 = (zext(*[ram]:1 $(ACC):2) << 8) | zext(*[ram]:1 $(C):2);
+    local d:2 = zext(*[ram]:1 $(B):2);
+    local quotient:2 = n / d;
+    local remainder:2 = n % d;
+
+    if (d == 0) goto <err>;
+
+    local out_acc = ((quotient & 0xFFFF) >> 8);
+    local out_b = remainder;
+    local out_c = (quotient & 0xFF);
+
+    *[ram]:1 $(ACC):2 = out_acc:1;
+    *[ram]:1 $(B):2 = out_b:1;
+    *[ram]:1 $(C):2 = out_c:1;
+    set_ov(0);
+    set_cy(0); 
+
+    goto inst_next;
+
+    # Divide by 0
+    <err>
+    *[ram]:1 $(ACC):2 = 0xFF;
+    set_ov(1);
+    set_cy(0); #TODO check this on hardware
+}
+
+# BE #i8,r8
+:be "#"imm8, REL is op0_8=0x31; imm8; REL {
+    if (*[ram]:1 $(ACC):2 == imm8) goto REL;
+}
+
+# BE d9,r8
+:be imm8, REL is op0_8=0x32; imm8; REL {
+    if (*[ram]:1 $(ACC):2 == *[ram]:1 imm8:2) goto REL;
+}
+
+:be d9, REL is op0_8=0x33; imm8; REL [d9 = 0x100 + imm8;]{
+    if (*[ram]:1 $(ACC):2 == *[ram]:1 d9:2) goto REL;
+}
+
+# BE @Ri, 
+:be "@"rn, imm8, REL is op4_4=0x3 & op2_2=0x1 & rn; imm8; REL {
+   if (*[ram]:1 rn == imm8) goto REL;
+} 
+
+# BNE #i8,r8
+:bne "#"imm8, REL is op0_8=0x41; imm8; REL {
+    if (*[ram]:1 $(ACC):2 != imm8) goto REL;
+}
+
+# BNE d9,r8
+:bne imm8, REL is op0_8=0x42; imm8; REL {
+    if (*[ram]:1 $(ACC):2 != *[ram]:1 imm8:2) goto REL;
+}
+
+:bne d9, REL is op0_8=0x43; imm8; REL [d9 = 0x100 + imm8;]{
+    if (*[ram]:1 $(ACC):2 != *[ram]:1 d9:2) goto REL;
+}
+
+# BNE @Ri, 
+:bne "@"rn, imm8, REL is op4_4=0x4 & op2_2=0x1 & rn; imm8; REL {
+   if (*[ram]:1 rn != imm8) goto REL;
+} 
+
+# BPC 
+# BPC d9,b3,r8	
+# 010 d8  1 b2 b1 b0 d7d6d5d4d3d2d1d0 r7r6r5r4r3r2r1r0	2
+# If the specified bit of the operand is set, clear the bit and branch. See BR for address calculation. No PSW flags are affected. 
+:bpc d9,b3,REL is op0_4>=0x8 & op4_4 <=0x5 & op4_4 >=0x4 & op0_4 & op4_4; imm8; REL [d9 = imm8 | ((op4_4 & 0x1) << 8); b3 = op0_4 & 0x7;] {
+    local bit:1 = (1 << b3);
+    local d9_val:1 = *[ram]:1 d9:2;
+    if (d9_val & bit != 0) goto <jump>;
+    goto inst_next;
+
+    <jump>
+    *[ram]:1 d9:2 = d9_val & (~bit); # Unset bit
+    goto REL;
+}
+
+#Mnemonic	Code	Cycles
+#DBNZ d9,r8	0101001d8 d7d6d5d4d3d2d1d0 r7r6r5r4r3r2r1r0	2
+#DBNZ @Ri,r8	01010 1 i1 i0 r7r6r5r4r3r2r1r0	2
+# Decrement the operand by one, and branch if the result is not zero. See BR for address calculation. No PSW flags are affected.
+
+# DBNZ d9,r8	
+:dbnz imm8, REL is op0_8=0x52; imm8; REL {
+    *[ram]:1 imm8:2 = *[ram]:1 imm8:2 - 1;
+    if (*[ram]:1 imm8:2 != 0) goto REL;
+}
+
+:dbnz d9, REL is op0_8=0x53; imm8; REL [d9 = 0x100 + imm8;]{
+     *[ram]:1 d9:2 = *[ram]:1 d9:2 - 1;
+    if (*[ram]:1 d9:2 != 0) goto REL;
+}
+
+
+# DBNZ @Ri,r8
+:dbnz "@"rn, REL is op4_4=0x5 & op2_2=0x1 & rn; REL {
+    *[ram]:1 rn = *[ram]:1 rn - 1;
+   if (*[ram]:1 rn != 0) goto REL;
+} 
+
+# PUSH d9
+:push imm8 is op0_8=0x60; imm8; REL {
+    push(*[ram]:1 imm8:2);
+}
+
+:push d9, is op0_8=0x61; imm8; REL [d9 = 0x100 + imm8;]{
+    push(*[ram]:1 d9:2);
+}
+
+# POP d9
+:pop imm8 is op0_8=0x70; imm8; REL {
+    #*[ram]:1 imm8:2 = pop();
+     local stack_addr:2 = zext(*[ram]:1 $(SP):2);
+     local stack_value:1 = *[ram]:1 stack_addr;
+     *[ram]:1 imm8:2 = stack_value;
+     *[ram]:1 $(SP):2 = (*[ram]:1 $(SP):2) - 1;
+}
+
+:pop d9, is op0_8=0x71; imm8; REL [d9 = 0x100 + imm8;]{
+    #*[ram]:1 d9:2 = pop();, TODO sort out pop macro
+     local stack_addr:2 = zext(*[ram]:1 $(SP):2);
+     local stack_value:1 = *[ram]:1 stack_addr;
+     *[ram]:1 d9:2 = stack_value;
+     *[ram]:1 $(SP):2 = (*[ram]:1 $(SP):2) - 1;
+}
+
+# INC d9	
+:inc imm8 is op0_8=0x62; imm8; REL {
+   *[ram]:1 imm8:2 = *[ram]:1 imm8:2 + 1;
+}
+
+:inc d9, is op0_8=0x63; imm8; REL [d9 = 0x100 + imm8;]{
+    *[ram]:1 d9:2 = *[ram]:1 d9:2 + 1;
+}
+
+# INC @Ri
+:inc "@"rn is op4_4=0x6 & op2_2=0x1 & rn {
+    *[ram]:1 rn = *[ram]:1 rn + 1;
+} 
+
+# BP d9,b3,r8
+:bp d9,b3,REL is op0_4>=0x8 & op4_4 <=0x7 & op4_4 >=0x6 & op0_4 & op4_4; imm8; REL [d9 = imm8 | ((op4_4 & 0x1) << 8); b3 = op0_4 & 0x7;] {
+    local bit:1 = (1 << b3);
+    local d9_val:1 = *[ram]:1 d9:2;
+    if (d9_val & bit != 0) goto <jump>;
+    goto inst_next;
+
+    <jump>
+    goto REL;
+}
+
+# DEC d9
+:dec imm8 is op0_8=0x72; imm8; REL {
+   *[ram]:1 imm8:2 = *[ram]:1 imm8:2 - 1;
+}
+
+:dec d9, is op0_8=0x73; imm8; REL [d9 = 0x100 + imm8;]{
+    *[ram]:1 d9:2 = *[ram]:1 d9:2 - 1;
+}
+
+# DEC @Ri
+:inc "@"rn is op4_4=0x7 & op2_2=0x1 & rn {
+    *[ram]:1 rn = *[ram]:1 rn - 1;
+} 
+
+# BZ r8 branch if ACC is zero
+:bz REL is op0_8=0x80; REL {
+    if (*[ram]:1 $(ACC):2 == 0) goto REL;
+}
+
+# BNZ r8 branch if ACC is zero
+:bzn REL is op0_8=0x90; REL {
+    if (*[ram]:1 $(ACC):2 != 0) goto REL;
+}
+
+# ADD instructions
+macro add(val) {
+    local acc = *[ram]:1 $(ACC):2;
+    local result = acc + val;
+    *[ram]:1 $(ACC):2 = result;
+    set_cy(val > 0xFF - acc);
+    set_ac((acc & 0xf) + (val & 0xf) > 0xf);
+    set_ov(0x80 & (~acc ^ val) & (acc ^ result) != 0);
+}
+
+# ADD #i8	
+:add "#"imm8 is op0_8=0x81; imm8 {
+    add(imm8);
+    
+}
+
+# ADD d9
+:add imm8 is op0_8=0x82; imm8 {
+   add(*[ram]:1 imm8:2);
+}
+
+:add d9, is op0_8=0x83; imm8 [d9 = 0x100 + imm8;]{
+    add(*[ram]:1 d9:2);
+}
+
+
+# ADD @Ri
+:add "@"rn is op4_4=0x8 & op2_2=0x1 & rn {
+    add(*[ram]:1 rn);
+} 
+
+# BN d9,b3,r8
+:bp d9,b3,REL is op0_4>=0x8 & op4_4 <=0x9 & op4_4 >=0x8 & op0_4 & op4_4; imm8; REL [d9 = imm8 | ((op4_4 & 0x1) << 8); b3 = op0_4 & 0x7;] {
+    local bit:1 = (1 << b3);
+    local d9_val:1 = *[ram]:1 d9:2;
+    if (d9_val & bit == 0) goto <jump>;
+    goto inst_next;
+
+    <jump>
+    goto REL;
+}
+
+# ADD instructions
+macro addc(val) {
+    local acc = *[ram]:1 $(ACC):2;
+    local cy = $(get_cy);
+    local result = acc + val + cy;
+    *[ram]:1 $(ACC):2 = result;
+    set_ac((acc & 0xf) + (val & 0xf) + cy > 0xf);
+    set_ov(0x80 & (!acc ^ val) & (acc ^ result) != 0);
+}
+
+# ADDC #i8	
+:addc "#"imm8 is op0_8=0x91; imm8 {
+    addc(imm8);
+}
+
+# ADDC d9
+:addc imm8 is op0_8=0x92; imm8 {
+   addc(*[ram]:1 imm8:2);
+}
+
+:addc d9, is op0_8=0x93; imm8 [d9 = 0x100 + imm8;]{
+    addc(*[ram]:1 d9:2);
+}
+
+# ADDC @Ri
+:addc "@"rn is op4_4=0x9 & op2_2=0x1 & rn {
+    addc(*[ram]:1 rn);
+} 
+
+# RET
+:ret is op0_8=0xA0 {
+    ret();
+}
+
+# RETI
+:reti is op0_8=0xB0 {
+   ret(); #Semantically similar to RET
+}
+
+# SUB instructions
+macro sub(val) {
+    local acc = *[ram]:1 $(ACC):2;
+    local result = acc - val;
+    *[ram]:1 $(ACC):2 = result;
+    set_cy(val > acc);
+    set_ac((val & 0xf) > (acc & 0xf));
+    set_ov(0x80 & (acc ^ val) & (~val ^ result) != 0);
+}
+
+# SUB #i8	
+:sub "#"imm8 is op0_8=0xA1; imm8 {
+    sub(imm8);
+}
+
+# SUB d9
+:sub imm8 is op0_8=0xA2; imm8 {
+   sub(*[ram]:1 imm8:2);
+}
+
+:sub d9, is op0_8=0xA3; imm8 [d9 = 0x100 + imm8;]{
+    sub(*[ram]:1 d9:2);
+}
+
+# SUB @Ri
+:sub "@"rn is op4_4=0xA & op2_2=0x1 & rn {
+    sub(*[ram]:1 rn);
+} 
+
+# NOT1 d9,b3
+:bp d9,b3 is op0_4>=0x8 & op4_4 <=0xb & op4_4 >=0xa & op0_4 & op4_4; imm8 [d9 = imm8 | ((op4_4 & 0x1) << 8); b3 = op0_4 & 0x7;] {
+    local bit:1 = (1 << b3);
+    local d9_val:1 = *[ram]:1 d9:2;
+
+    *[ram]:1 d9:2 = d9_val ^ bit;
+}
+
+# SUBC instructions
+macro subc(val) { 
+    local acc = *[ram]:1 $(ACC):2;
+    local cy = $(get_cy);
+    local result = acc - val - cy;
+    *[ram]:1 $(ACC):2 = result;
+    set_cy(val > acc | ((val == acc) & cy));
+    set_ac((val & 0xf) + cy > (acc & 0xf));
+    set_ov(0x80 & (acc ^ val) & (~val ^ result) != 0);
+}
+
+# SUBC #i8	
+:subc "#"imm8 is op0_8=0xB1; imm8 {
+    subc(imm8);
+}
+
+# SUBC d9
+:subc imm8 is op0_8=0xB2; imm8 {
+   subc(*[ram]:1 imm8:2);
+}
+
+:subc d9, is op0_8=0xB3; imm8 [d9 = 0x100 + imm8;]{
+    subc(*[ram]:1 d9:2);
+}
+
+# SUBC @Ri
+:subc "@"rn is op4_4=0xB & op2_2=0x1 & rn {
+    subc(*[ram]:1 rn);
+} 
+
+# ROR
+:ror, is op0_8=0xC0 {
+    local acc = *[ram]:1 $(ACC):2;
+    *[ram]:1 $(ACC):2 = (acc << 7) | (acc >> 1);
+}
+
+# RORC
+:rorc, is op0_8=0xd0 {
+    local acc = *[ram]:1 $(ACC):2;
+    local cy = $(get_cy);
+    set_cy(acc & 0x1);
+    *[ram]:1 $(ACC):2 = (cy << 7) | (acc >> 1);
+}
+
+# ROL
+:rol, is op0_8=0xe0 {
+    local acc = *[ram]:1 $(ACC):2;
+    *[ram]:1 $(ACC):2 = (acc << 1) | (acc >> 7);
+}
+
+# ROLC
+:rolc, is op0_8=0xf0 {
+    local acc = *[ram]:1 $(ACC):2;
+    local cy = $(get_cy);
+    *[ram]:1 $(ACC):2  = (acc << 1) | (cy << 7);
+}
+
+# LDC
+:ldc is op0_8=0xc1 {
+    local rom_addr:2 = zext(*[ram]:1 $(TRL):2) | (zext(*[ram]:1 $(TRH):2) << 8);
+    *[ram]:1 $(ACC):2 = *[rom]:1 rom_addr;
+}
+
+# XCH
+macro xch(addr) {
+    local acc = *[ram]:1 $(ACC):2;
+    *[ram]:1 $(ACC):2 = *[ram]:1 addr;
+    *[ram]:1 addr = acc;
+}
+
+# XCH d9
+:xch imm8 is op0_8=0xC2; imm8 {
+   xch(imm8:2);
+}
+
+:xch d9, is op0_8=0xC3; imm8 [d9 = 0x100 + imm8;]{
+    xch(d9:2);
+}
+
+# XCH @Ri
+:xch "@"rn is op4_4=0xC & op2_2=0x1 & rn {
+    xch(rn);
+} 
+
+#CLR1 d9,b3
+:bp d9,b3 is op0_4>=0x8 & op4_4 <=0xd & op4_4 >=0xc & op0_4 & op4_4; imm8 [d9 = imm8 | ((op4_4 & 0x1) << 8); b3 = op0_4 & 0x7;] {
+    local bit:1 = (1 << b3);
+    local d9_val:1 = *[ram]:1 d9:2;
+
+    *[ram]:1 d9:2 = d9_val & ~bit;
+}
+
+# OR #i8,r8
+:or "#"imm8, is op0_8=0xD1; imm8 {
+    *[ram]:1 $(ACC):2 = *[ram]:1 $(ACC):2 | imm8;
+}
+
+# OR d9
+:or imm8 is op0_8=0xd2; imm8 {
+    *[ram]:1 $(ACC):2 = *[ram]:1 $(ACC):2 | *[ram]:1 imm8:2;
+}
+
+:or d9 is op0_8=0xd3; imm8 [d9 = 0x100 + imm8;]{
+    *[ram]:1 $(ACC):2 = *[ram]:1 $(ACC):2 | *[ram]:1 d9:2;
+}
+
+# OR @Ri
+:or "@"rn is op4_4=0xd & op2_2=0x1 & rn {
+   *[ram]:1 $(ACC):2 = *[ram]:1 $(ACC):2 | *[ram]:1 rn;
+} 
+
+# AND #i8,r8
+:and "#"imm8, is op0_8=0xe1; imm8 {
+    *[ram]:1 $(ACC):2 = *[ram]:1 $(ACC):2 & imm8;
+}
+
+#AND d9
+:and imm8 is op0_8=0xe2; imm8 {
+    *[ram]:1 $(ACC):2 = *[ram]:1 $(ACC):2 & *[ram]:1 imm8:2;
+}
+
+:and d9 is op0_8=0xe3; imm8 [d9 = 0x100 + imm8;]{
+    *[ram]:1 $(ACC):2 = *[ram]:1 $(ACC):2 & *[ram]:1 d9:2;
+}
+
+# AND @Ri
+:and "@"rn is op4_4=0xe & op2_2=0x1 & rn {
+   *[ram]:1 $(ACC):2 = *[ram]:1 $(ACC):2 & *[ram]:1 rn;
+} 
+
+# XOR #i8,r8
+:xor "#"imm8, is op0_8=0xf1; imm8 {
+    *[ram]:1 $(ACC):2 = *[ram]:1 $(ACC):2 ^ imm8;
+}
+
+#XOR d9
+:xor imm8 is op0_8=0xf2; imm8 {
+    *[ram]:1 $(ACC):2 = *[ram]:1 $(ACC):2 ^ *[ram]:1 imm8:2;
+}
+
+:xor d9 is op0_8=0xf3; imm8 [d9 = 0x100 + imm8;]{
+    *[ram]:1 $(ACC):2 = *[ram]:1 $(ACC):2 ^ *[ram]:1 d9:2;
+}
+
+# XOR @Ri
+:xor "@"rn is op4_4=0xf & op2_2=0x1 & rn {
+   *[ram]:1 $(ACC):2 = *[ram]:1 $(ACC):2 ^ *[ram]:1 rn;
+} 

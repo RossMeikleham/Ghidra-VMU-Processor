@@ -1,0 +1,21 @@
+<processor_spec>
+
+ <programcounter register="pc"/>
+
+<default_memory_blocks>
+        <memory_block name="ram" start_address="ram:0x0000" length="0x200" mode="rw"/>
+</default_memory_blocks>
+
+ <default_symbols>
+    <symbol name="start" address="rom:0" entry="true"/>
+    <symbol name="acc" address="ram:0x100" />
+    <symbol name="psw" address="ram:0x101" />
+    <symbol name="b" address="ram:0x102" />
+    <symbol name="c" address="ram:0x103" />
+    <symbol name="sp" address="ram:0x106" />
+    <symbol name="pcon" address="ram:0x107" />
+    <symbol name="ie" address="ram:0x108" />
+
+  </default_symbols>
+
+</processor_spec> 
