@@ -11,6 +11,6 @@ Copy the `LC8670` folder into the `$(GHIDRA_ROOT)/Ghidra/Processors/` directory;
 
 
 ## Credits
-Marcus Comstedt - [Dreamcast Programming](http://mc.pp.se/dc/)
-Dmitry Grinberg - [VMU Hackery 2017](https://dmitry.gr/?r=05.Projects&proj=25.%20VMU%20Hacking)
+- Marcus Comstedt - [Dreamcast Programming](http://mc.pp.se/dc/)
+- Dmitry Grinberg - [VMU Hackery 2017](https://dmitry.gr/?r=05.Projects&proj=25.%20VMU%20Hacking)
  
