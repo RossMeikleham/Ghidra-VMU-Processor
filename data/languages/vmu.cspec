@@ -12,12 +12,13 @@
 
   <stackpointer register="sp" space="ram" growth="positive"/>
 
+
   <returnaddress>
     <varnode space="stack" offset="0" size="2"/>
   </returnaddress>
 
   <default_proto>
-    <prototype name="default" extrapop="unknown" stackshift="2" strategy="register">
+    <prototype name="__stdcall" extrapop="2" stackshift="2" strategy="register">
       <input>
       </input>
       <output>
@@ -25,6 +26,7 @@
       <unaffected>
         <register name="sp"/>
       </unaffected>
+
     </prototype>
   </default_proto>
 

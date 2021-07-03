@@ -7,15 +7,71 @@
 </default_memory_blocks>
 
  <default_symbols>
-    <symbol name="start" address="rom:0" entry="true"/>
+    
+    <symbol name="entry" address="rom:0" entry="true"/>
+    <symbol name="int0_vec" address="rom:0x03"/>
+    <symbol name="int1_vec" address="rom:0x0B"/>
+    <symbol name="int2_vec" address="rom:0x13"/>
+    <symbol name="int3_vec" address="rom:0x1B"/>
+    <symbol name="int_t0h_vec" address="rom:0x23"/>
+    <symbol name="int_t1_vec" address="rom:0x2B"/>
+    <symbol name="int_sio0_vec" address="rom:0x33"/>
+    <symbol name="int_sio1_vec" address="rom:0x3B"/>
+    <symbol name="int_vms_vec" address="rom:0x43"/>
+    <symbol name="int_p3_vec" address="rom:0x4B"/>
+  
+
     <symbol name="acc" address="ram:0x100" />
     <symbol name="psw" address="ram:0x101" />
     <symbol name="b" address="ram:0x102" />
     <symbol name="c" address="ram:0x103" />
-    <symbol name="sp" address="ram:0x106" />
+    <symbol name="trl" address="ram:0x104" />
+    <symbol name="trh" address="ram:0x105" />
+    <symbol name="sp_mem" address="ram:0x106" />
     <symbol name="pcon" address="ram:0x107" />
     <symbol name="ie" address="ram:0x108" />
+    <symbol name="ip" address="ram:0x109" />
+    <symbol name="ext" address="ram:0x10D" />
+    <symbol name="ocr" address="ram:0x10E" />
+    <symbol name="t0con" address="ram:0x110" />
+    <symbol name="t0prr" address="ram:0x111" />
+    <symbol name="t0l" address="ram:0x112" />
+    <symbol name="t0lr" address="ram:0x113" />
+    <symbol name="t0h" address="ram:0x114" />
+    <symbol name="t0hr" address="ram:0x115" />
+    <symbol name="t1cnt" address="ram:0x118" />
+    <symbol name="t1lc" address="ram:0x11A" />
+    <symbol name="t1l" address="ram:0x11B" />
+    <symbol name="t1hc" address="ram:0x11C" />
+    <symbol name="t1h" address="ram:0x11D" />
+    <symbol name="mcr" address="ram:0x120" />
+    <symbol name="stad" address="ram:0x122" />
+    <symbol name="cnr" address="ram:0x123" />
+    <symbol name="tdr" address="ram:0x124" />
+    <symbol name="xbnk" address="ram:0x125" />
+    <symbol name="vccr" address="ram:0x127" />
+    <symbol name="scon0" address="ram:0x130" />
+    <symbol name="sbr" address="ram:0x132" />
+    <symbol name="scon1" address="ram:0x134" />
+    <symbol name="sbuf1" address="ram:0x135" />
+    <symbol name="p1" address="ram:0x144" />
+    <symbol name="p1ddr" address="ram:0x145" />
+    <symbol name="p1fcr" address="ram:0x146" />
+    <symbol name="p3" address="ram:0x14C" />
+    <symbol name="p3ddr" address="ram:0x14D" />
+    <symbol name="p3int" address="ram:0x14E" />
+    <symbol name="p7" address="ram:0x15C" />
+    <symbol name="io1cr" address="ram:0x15D" />
+    <symbol name="i23cr" address="ram:0x15E" />
+    <symbol name="isl" address="ram:0x15F" />
+    <symbol name="vsel" address="ram:0x163" />
+    <symbol name="vrmad1" address="ram:0x164" />
+    <symbol name="vrmad2" address="ram:0x165" />
+    <symbol name="vtrbf" address="ram:0x166" />
+    <symbol name="vlreg" address="ram:0x167" />
+    <symbol name="btcr" address="ram:0x17f" />
+    <symbol name="xram" address="ram:0x180" />
 
-  </default_symbols>
+ </default_symbols>
 
 </processor_spec> 
