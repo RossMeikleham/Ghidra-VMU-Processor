@@ -123,7 +123,7 @@ macro ret() {
 }
 
 # CALL a12 
-:call a12 is op0_4>=0x8 & op4_4 <=0x1 & op0_4 & op4_4; imm8 [a12 = (imm8 | ((op0_4 - 0x8) << 8) | (op4_4 << 11));] {
+:call a12 is op0_4>=0x8 & op4_4 <=0x1 & op0_4 & op4_4; imm8 [a12 = (inst_next & 0xf000) | (imm8 | ((op0_4 - 0x8) << 8) | (op4_4 << 11));] {
     call(a12:2);
 }
 
@@ -176,7 +176,7 @@ macro ret() {
 }
 
 # JMP a12 
-:jmp a12 is op0_4>=0x8 & op4_4 <=0x3 & op4_4 >=0x2 & op0_4 & op4_4; imm8 [a12 = (imm8 | ((op0_4 - 0x8) << 8) | ((op4_4 & 0x1) << 11));] {
+:jmp a12 is op0_4>=0x8 & op4_4 <=0x3 & op4_4 >=0x2 & op0_4 & op4_4; imm8 [a12 = (inst_next & 0xf000) | (imm8 | ((op0_4 - 0x8) << 8) | ((op4_4 & 0x1) << 11));] {
     goto [a12:2];
 }
 
@@ -374,7 +374,7 @@ macro ret() {
    *[ram]:1 imm8:2 = *[ram]:1 imm8:2 - 1;
 }
 
-:dec d9, is op0_8=0x73; imm8; REL [d9 = 0x100 + imm8;]{
+:dec d9, is op0_8=0x73; imm8 [d9 = 0x100 + imm8;]{
     *[ram]:1 d9:2 = *[ram]:1 d9:2 - 1;
 }
 
