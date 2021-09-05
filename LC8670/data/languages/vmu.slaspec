@@ -167,7 +167,10 @@ macro ret() {
 }
 
 :mov "#"imm8_2, d9 is op0_8=0x23; imm8; imm8_2 [d9 = 0x100 + imm8;] {
-     *[ram]:1 d9:2 = imm8_2:1;
+      if (d9 != $(ACC):2) goto <fin>;
+        acc = imm8_2:1;
+      <fin>
+        *[ram]:1 d9:2 = imm8_2:1;
 }
 
 # MOV #i8 @Ri
@@ -197,6 +200,21 @@ macro ret() {
     set_cy(0);
     set_ov(out_b != 0);
 }
+
+#                     /* Load FAT location into ACC, store in B and 0x52 */
+# DAT_ram_0052 = read_flash_byte(CONCAT11(trh,trl));
+#                    /* 0x200 * FAT Block Num */
+#  iVar1 = (uint)DAT_ram_0052 * 0x100 * (uint)DAT_ram_0052;
+#  DAT_ram_006f = (byte)((uint)iVar1 >> 0x10) & 1;
+#  acc = 2;
+#  
+# actual vals before mul
+#  acc = 2
+#  c = 0
+#  b = DAT_ram_0052
+#  
+#  (2 << 8 | 0) * DAT_ram_0052
+
 
 # DIV
 :div is op0_8=0x40 {
@@ -389,7 +407,7 @@ macro ret() {
 }
 
 # BNZ r8 branch if ACC is zero
-:bzn REL is op0_8=0x90; REL {
+:bnz REL is op0_8=0x90; REL {
     if (acc != 0) goto REL;
 }
 
@@ -656,3 +674,17 @@ macro xch(addr) {
 :xor "@"rn is op4_4=0xf & op2_2=0x1 & rn {
    acc = acc ^ *[ram]:1 rn;
 } 
+
+define pcodeop read_flash_byte;
+
+# LDF // TODO add ROM banking modes 
+:ldf is op0_8=0x50 {
+    local trh:2 = zext(*[ram]:1 $(TRH):2) << 8;
+    local trl:2 = zext(*[ram]:1 $(TRL):2);
+    acc = read_flash_byte(trh | trl);
+}
+
+# STF
+:stf is op0_8=0x51 {
+    pc = pc;
+}

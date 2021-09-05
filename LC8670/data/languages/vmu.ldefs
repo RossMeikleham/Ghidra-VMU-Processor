@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <language_definitions>
-    <language processor="Dreamcast VMU"
+    <language processor="LC8670"
               endian="little"
               size="8"
               variant="default"
@@ -9,7 +9,7 @@
               slafile="vmu.sla"
               processorspec="vmu.pspec"
               id="vmu:2:default">
-        <description>Sanyo LC8670 "Potato" VMU</description>
+        <description>LC8670/description>
         <compiler name="default" spec="vmu.cspec" id="default"/>
     </language>
 </language_definitions>
