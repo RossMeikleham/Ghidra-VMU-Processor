@@ -4,12 +4,12 @@
     <language processor="LC8670"
               endian="little"
               size="8"
-              variant="default"
+              variant="VMU"
               version="1.0"
               slafile="vmu.sla"
               processorspec="vmu.pspec"
               id="vmu:2:default">
-        <description>LC8670/description>
+        <description>LC8670</description>
         <compiler name="default" spec="vmu.cspec" id="default"/>
     </language>
 </language_definitions>
