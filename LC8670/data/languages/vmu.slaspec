@@ -388,7 +388,7 @@ macro ret() {
 
 
 # DEC d9
-:dec imm8 is op0_8=0x72; imm8; REL {
+:dec imm8 is op0_8=0x72; imm8 {
    *[ram]:1 imm8:2 = *[ram]:1 imm8:2 - 1;
 }
 
@@ -397,7 +397,7 @@ macro ret() {
 }
 
 # DEC @Ri
-:inc "@"rn is op4_4=0x7 & op2_2=0x1 & rn {
+:dec "@"rn is op4_4=0x7 & op2_2=0x1 & rn {
     *[ram]:1 rn = *[ram]:1 rn - 1;
 } 
 

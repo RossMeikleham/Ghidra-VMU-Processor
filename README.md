@@ -11,7 +11,8 @@ Copy the `LC8670` folder into the `$(GHIDRA_ROOT)/Ghidra/Processors/` directory;
 
 ## Modifying
 
-From the root of the repository, after modifying `LC8670/data/languages/vmu.slaspec`; to regenerate the `vmu.sla` file run:
+Ghidra 11 and above automatically generates the `vmu.sla` file from the `vmu.slaspec`, on Ghidra 10 this
+will need to be generated via
 
 `${PATH_TO_GHIDRA}/support/sleigh LC8670/data/languages/vmu.slaspec`
 
